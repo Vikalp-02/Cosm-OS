@@ -51,7 +51,13 @@ ROWS: dict[str, dict[str, object]] = {
         "city": "Bengaluru",
         "state": "Karnataka",
     },
-    "campaign": {**CAMPAIGN_KEY, "campaign_name": "Oats search", "daily_budget": None},
+    "campaign": {**CAMPAIGN_KEY, "campaign_name": "Oats search"},
+    "campaign_daily": {
+        **CAMPAIGN_KEY,
+        "report_date": DAY,
+        "daily_budget": None,
+        "is_active": True,
+    },
     "campaign_item": {**CAMPAIGN_KEY, "platform_item_id": "B-1"},
     "sales_daily": {
         **LISTING_KEY,

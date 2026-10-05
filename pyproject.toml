@@ -7,10 +7,22 @@ name = "cosmos"
 version = "0.1.0"
 description = "Root-cause investigation for quick-commerce revenue leaks"
 requires-python = ">=3.11"
-dependencies = ["duckdb>=1.1"]
+dependencies = [
+    "alembic>=1.13",
+    "argon2-cffi>=23.1",
+    "dbt-duckdb>=1.9",
+    "duckdb>=1.1",
+    "fastapi>=0.115",
+    "numpy>=2.0",
+    "pyarrow>=17",
+    "pydantic-settings>=2.4",
+    "sqlalchemy>=2.0.30",
+    "uvicorn>=0.30",
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11"]
+dev = ["httpx>=0.27", "mypy>=1.11", "pytest>=8", "ruff>=0.6"]
+postgres = ["psycopg[binary]>=3.2"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cosmos"]
@@ -26,6 +38,10 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 strict = true
 python_version = "3.11"
 files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

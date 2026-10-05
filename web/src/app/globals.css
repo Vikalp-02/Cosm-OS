@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* Colours by role. Every component is written against these, so light and
+   dark are defined once, here. */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-3: #6b6a65;
+  --line: #e1e0d9;
+  --axis: #c3c2b7;
+  --axis-ink: #898781;
+  --edge: rgba(11, 11, 11, 0.1);
+  --wash: rgba(11, 11, 11, 0.04);
+  --wash-strong: rgba(11, 11, 11, 0.07);
+  /* Chart marks: the series that matters, the context beside it, and the two
+     poles of a gain or a loss. */
+  --series: #2a78d6;
+  --context: #898781;
+  --gain: #2a78d6;
+  --loss: #e34948;
+  --danger-ink: #b42323;
+  --focus: #2a78d6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-3: #a3a29a;
+    --line: #2c2c2a;
+    --axis: #383835;
+    --axis-ink: #898781;
+    --edge: rgba(255, 255, 255, 0.1);
+    --wash: rgba(255, 255, 255, 0.05);
+    --wash-strong: rgba(255, 255, 255, 0.09);
+    --series: #3987e5;
+    --context: #898781;
+    --gain: #3987e5;
+    --loss: #e66767;
+    --danger-ink: #f08a8a;
+    --focus: #6da7ec;
+  }
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-edge: var(--edge);
+  --color-wash: var(--wash);
+  --color-wash-strong: var(--wash-strong);
+  --color-series: var(--series);
+  --color-context: var(--context);
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
+  --color-danger: var(--danger-ink);
+  --color-focus: var(--focus);
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

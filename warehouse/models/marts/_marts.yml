@@ -1,0 +1,132 @@
+version: 2
+
+models:
+  - name: dim_product
+    description: Products a tenant tracks, both its own and those of competitors.
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [tenant_id, sku_id]
+
+  - name: dim_listing
+    description: A product as listed on one platform. A product has at most one listing per platform.
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [tenant_id, platform, platform_item_id]
+      - unique_grain:
+          arguments:
+            columns: [tenant_id, platform, sku_id]
+
+  - name: dim_location
+    description: Dark stores per platform.
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [platform, location_id]
+
+  - name: fct_sales_reporting_daily
+    description: >
+      Whether the sales for each city arrived on each day. Used to tell a day
+      with no sales apart from a day with no data.
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [tenant_id, platform, city, date_day]
+    columns:
+      - name: is_reported
+        description: True when at least one sales row arrived for the city that day.
+        data_tests: [not_null]
+      - name: prior_reporting_rate
+        description: Share of the preceding days, up to the reporting window, on which the city reported.
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: is_gap
+        description: True when a city that normally reports sent nothing.
+        data_tests: [not_null]
+
+  - name: fct_listing_city_daily
+    description: >
+      One row per product, city and day from the first sale of the product in
+      that city: units and revenue sold, and the availability, price, search
+      and stock position that could explain them.
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [tenant_id, platform, city, sku_id, date_day]
+    columns:
+      - name: sales_reported
+        description: False on days the sales for the city never arrived. Sales are null on those days.
+        data_tests: [not_null]
+      - name: units_sold
+        description: >
+          Units sold. Zero when the city reported and the product had no row;
+          null when the city did not report.
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 0
+                max_value: 1000000
+      - name: gmv
+        description: Gross merchandise value in rupees, with the same null rule as units_sold.
+      - name: stores_checked
+        description: Dark stores in the city where the listing was checked that day.
+      - name: availability
+        description: Share of the checked dark stores where the listing could be bought.
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: avg_selling_price
+        description: Mean price shown across the dark stores in the city.
+      - name: price_to_mrp
+        description: Selling price as a share of MRP. Lower means a deeper discount.
+      - name: rival_price_to_mrp
+        description: Mean selling price over MRP across competitor products in the same category and city.
+      - name: organic_results
+        description: Searches in which the listing appeared as an organic result.
+      - name: avg_organic_rank
+        description: Mean position among the organic results of those searches, ignoring sponsored slots. Lower is better.
+      - name: organic_reciprocal_rank
+        description: >
+          Mean of one over organic position, with each search weighted by how
+          much its search term matters. Higher is better, and the top of the
+          page counts most.
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 0
+                max_value: 1
+      - name: sponsored_share
+        description: Share of those searches in which the listing also held a sponsored slot.
+      - name: units_on_hand
+        description: Warehouse stock for the city at the end of the day.
+      - name: open_po_units
+        description: Units on purchase orders still expected.
+      - name: po_units_lapsed
+        description: Units on purchase orders that were due that day and never arrived.
+      - name: days_of_cover
+        description: Warehouse stock divided by mean daily units sold over the preceding cover window.
+
+  - name: fct_campaign_daily
+    description: One row per campaign and day, with its budget and what it delivered.
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [tenant_id, platform, campaign_id, date_day]
+    columns:
+      - name: category
+        description: Category most of the listings in the campaign belong to.
+      - name: daily_budget
+        description: Daily spend cap as it stood that day. Null when uncapped.
+      - name: budget_utilisation
+        description: Spend as a share of the daily budget. Near one means the budget ran out.
+        data_tests:
+          - in_range:
+              arguments:
+                min_value: 0
+                max_value: 1.001

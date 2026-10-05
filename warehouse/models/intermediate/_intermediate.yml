@@ -1,0 +1,42 @@
+version: 2
+
+models:
+  - name: int_pincode_city
+    description: The city each pincode belongs to on a platform.
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [platform, pincode]
+
+  - name: int_keyword_weight
+    description: The weight each search term carries when visibility is averaged over searches.
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [tenant_id, platform, keyword]
+    columns:
+      - name: weight
+        data_tests:
+          - not_null
+          - in_range:
+              arguments:
+                min_value: 0.000001
+                max_value: 1000000000
+
+  - name: int_shelf_city_daily
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [tenant_id, platform, city, platform_item_id, date_day]
+
+  - name: int_search_city_daily
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [tenant_id, platform, city, platform_item_id, date_day]
+
+  - name: int_rival_price_city_daily
+    data_tests:
+      - unique_grain:
+          arguments:
+            columns: [tenant_id, platform, city, category, date_day]

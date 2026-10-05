@@ -1,0 +1,9 @@
+# Paths default to a `data` directory beside this project, which is where the
+# generator writes. `python -m cosmos.warehouse` sets both variables for you.
+cosmos:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('COSMOS_WAREHOUSE', '../data/warehouse.duckdb') }}"
+      threads: 4

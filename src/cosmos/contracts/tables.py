@@ -103,8 +103,27 @@ CAMPAIGN: Final = TableContract(
         PLATFORM,
         _key("campaign_id", "The platform's campaign identifier."),
         _key("campaign_name", "Display name."),
-        _amount("daily_budget", "Daily spend cap. Null when uncapped.", nullable=True),
     ),
+)
+
+_CAMPAIGN_KEY: Final = ("tenant_id", "platform", "campaign_id")
+_TO_CAMPAIGN: Final = ForeignKey(_CAMPAIGN_KEY, "campaign", _CAMPAIGN_KEY)
+
+# Budgets change over time, and a budget cut only explains a sales drop if the
+# budget on the day of the drop is known. A single current value cannot say.
+CAMPAIGN_DAILY: Final = TableContract(
+    name="campaign_daily",
+    description="Campaign settings as they stood on each day.",
+    grain=("tenant_id", "platform", "report_date", "campaign_id"),
+    columns=(
+        TENANT,
+        PLATFORM,
+        Column("report_date", SqlType.DATE, "Day the settings applied to."),
+        _key("campaign_id", "Campaign."),
+        _amount("daily_budget", "Daily spend cap. Null when uncapped.", nullable=True),
+        Column("is_active", SqlType.BOOLEAN, "False when the campaign was paused."),
+    ),
+    foreign_keys=(_TO_CAMPAIGN,),
 )
 
 CAMPAIGN_ITEM: Final = TableContract(
@@ -117,14 +136,7 @@ CAMPAIGN_ITEM: Final = TableContract(
         _key("campaign_id", "Campaign."),
         ITEM,
     ),
-    foreign_keys=(
-        ForeignKey(
-            ("tenant_id", "platform", "campaign_id"),
-            "campaign",
-            ("tenant_id", "platform", "campaign_id"),
-        ),
-        _TO_LISTING,
-    ),
+    foreign_keys=(_TO_CAMPAIGN, _TO_LISTING),
 )
 
 SALES_DAILY: Final = TableContract(
@@ -234,7 +246,10 @@ SEARCH_RANK_OBSERVATION: Final = TableContract(
         ITEM,
         Column("is_sponsored", SqlType.BOOLEAN, "True for a paid placement."),
         Column(
-            "search_rank", SqlType.INTEGER, "Position, starting at 1.", check="search_rank >= 1"
+            "search_rank",
+            SqlType.INTEGER,
+            "Position on the page, 1 first.",
+            check="search_rank >= 1",
         ),
     ),
     foreign_keys=(_TO_LISTING,),
@@ -258,13 +273,7 @@ AD_PERFORMANCE_DAILY: Final = TableContract(
         _count("attributed_orders", "Orders the platform attributes to the ad."),
         _amount("attributed_revenue", "Revenue the platform attributes to the ad."),
     ),
-    foreign_keys=(
-        ForeignKey(
-            ("tenant_id", "platform", "campaign_id"),
-            "campaign",
-            ("tenant_id", "platform", "campaign_id"),
-        ),
-    ),
+    foreign_keys=(_TO_CAMPAIGN,),
 )
 
 # Ordered so that every table appears after the tables it references.
@@ -273,6 +282,7 @@ ALL_CONTRACTS: Final = (
     LISTING,
     LOCATION,
     CAMPAIGN,
+    CAMPAIGN_DAILY,
     CAMPAIGN_ITEM,
     SALES_DAILY,
     INVENTORY_SNAPSHOT,

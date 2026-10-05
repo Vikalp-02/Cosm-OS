@@ -1,0 +1,20 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw tables as delivered at the ingestion boundary, one Parquet file each.
+    meta:
+      external_location: "{{ env_var('COSMOS_DATA_DIR', '../data') }}/raw/{name}.parquet"
+    tables:
+      - name: product
+      - name: listing
+      - name: location
+      - name: campaign
+      - name: campaign_daily
+      - name: campaign_item
+      - name: sales_daily
+      - name: inventory_snapshot
+      - name: purchase_order_line
+      - name: shelf_observation
+      - name: search_rank_observation
+      - name: ad_performance_daily
