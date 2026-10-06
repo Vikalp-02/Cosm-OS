@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, text
 from sqlalchemy.orm import Session
 
+from cosmos.app.ask import Answer, LeakRecord, Progress, Turn, ask
+from cosmos.app.calls import database_recorder
+from cosmos.app.facts import NOISE_BAND
 from cosmos.app.models import Leak, Membership, Tenant, User, UserSession
 from cosmos.app.narrative import (
     CAUSE_LABELS,
@@ -20,13 +26,12 @@ from cosmos.app.narrative import (
     platform_label,
     readings,
 )
-from cosmos.app.security import LoginThrottle, hash_token, new_session_token, verify_password
+from cosmos.app.security import Throttle, hash_token, new_session_token, verify_password
 from cosmos.app.settings import Settings
 from cosmos.app.store import OPEN
 
 SESSION_COOKIE = "cosmos_session"
-# An unexplained figure within this many standard deviations of ordinary variation is chance.
-NOISE_BAND = 2.0
+log = logging.getLogger("cosmos.api")
 
 router = APIRouter(prefix="/api")
 
@@ -79,6 +84,8 @@ class Account(BaseModel):
     email: str
     tenant_id: str
     tenant_name: str
+    # Whether questions can be asked. False when no language model is configured.
+    assistant: bool
 
 
 class Option(BaseModel):
@@ -153,6 +160,8 @@ class Product(BaseModel):
 
 
 class LeakDetail(LeakSummary):
+    # An AI-written summary, checked against the figures below. None if there is none.
+    summary: str | None
     what_happened: str
     why: str
     products: list[Product]
@@ -167,6 +176,20 @@ class LeakDetail(LeakSummary):
     detected_at: datetime
 
 
+class PastTurn(BaseModel):
+    question: str = Field(max_length=500)
+    answer: str = Field(max_length=4000)
+    references: list[str] = Field(default_factory=list, max_length=10)
+
+
+class Question(BaseModel):
+    question: str = Field(min_length=2, max_length=500)
+    # The leak whose page the question was asked from, if any.
+    reference: str | None = Field(default=None, max_length=16)
+    # The conversation so far, oldest first. The server keeps none of it.
+    history: list[PastTurn] = Field(default_factory=list, max_length=4)
+
+
 @router.get("/health")
 def health(db: Database) -> dict[str, str]:
     db.execute(text("SELECT 1"))
@@ -176,7 +199,7 @@ def health(db: Database) -> dict[str, str]:
 @router.post("/auth/login")
 def login(credentials: Credentials, request: Request, response: Response, db: Database) -> Account:
     settings: Settings = request.app.state.settings
-    throttle: LoginThrottle = request.app.state.throttle
+    throttle: Throttle = request.app.state.throttle
     email = credentials.email.strip().lower()
     key = f"{email}|{request.client.host if request.client else ''}"
 
@@ -199,7 +222,7 @@ def login(credentials: Credentials, request: Request, response: Response, db: Da
         )
     password_ok = verify_password(user.password_hash if user else None, credentials.password)
     if user is None or tenant is None or not password_ok:
-        throttle.record_failure(key)
+        throttle.record(key)
         # One message for every failure, so it cannot be used to find out which emails exist.
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "That email and password don't match.")
     throttle.clear(key)
@@ -226,7 +249,7 @@ def login(credentials: Credentials, request: Request, response: Response, db: Da
         samesite="lax",
         path="/",
     )
-    return _account(user, tenant)
+    return _account(request, user, tenant)
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -239,8 +262,8 @@ def logout(request: Request, response: Response, db: Database) -> None:
 
 
 @router.get("/auth/me")
-def me(principal: SignedIn) -> Account:
-    return _account(principal.user, principal.tenant)
+def me(request: Request, principal: SignedIn) -> Account:
+    return _account(request, principal.user, principal.tenant)
 
 
 @router.get("/leaks")
@@ -304,6 +327,7 @@ def get_leak(reference: str, principal: SignedIn, db: Database) -> LeakDetail:
     unexplained_units = payload["unexplained_units"]
     return LeakDetail(
         **_summary(leak).model_dump(),
+        summary=leak.summary["text"] if leak.summary else None,
         what_happened=story.what_happened,
         why=story.why,
         products=[Product(**product) for product in payload["products"]],
@@ -329,8 +353,90 @@ def get_leak(reference: str, principal: SignedIn, db: Database) -> LeakDetail:
     )
 
 
-def _account(user: User, tenant: Tenant) -> Account:
-    return Account(name=user.name, email=user.email, tenant_id=tenant.id, tenant_name=tenant.name)
+@router.post("/ask")
+def ask_question(
+    body: Question, request: Request, principal: SignedIn, db: Database
+) -> StreamingResponse:
+    """Answer a question about the tenant's leaks, as a stream of JSON lines.
+
+    Each line is either `{"type": "progress", "text": ...}` or, last, the answer.
+    Progress is sent as it happens because an answer can take several seconds.
+    """
+    llm = request.app.state.llm
+    if llm is None:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Questions are not switched on yet."
+        )
+    throttle: Throttle = request.app.state.ask_throttle
+    wait = throttle.retry_after(principal.user.id)
+    if wait is not None:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "That's a lot of questions. Give it a minute and try again.",
+            headers={"Retry-After": str(wait)},
+        )
+    throttle.record(principal.user.id)
+
+    # Everything is read before streaming starts: the database session belongs
+    # to the request and may be closed by the time the stream is consumed.
+    leaks = [
+        LeakRecord(leak.reference, leak.payload)
+        for leak in db.scalars(
+            select(Leak).where(Leak.tenant_id == principal.tenant.id, Leak.status == OPEN)
+        )
+    ]
+    headlines = {leak.reference: narrate(leak.payload).headline for leak in leaks}
+    record = database_recorder(request.app.state.sessions, principal.tenant.id)
+    history = [Turn(turn.question, turn.answer, tuple(turn.references)) for turn in body.history]
+
+    def lines() -> Iterator[str]:
+        try:
+            events = ask(
+                body.question.strip(),
+                leaks,
+                llm,
+                record,
+                today=datetime.now(UTC).date(),
+                history=history,
+                on_page=body.reference,
+            )
+            for event in events:
+                yield json.dumps(_event(event, headlines)) + "\n"
+        except Exception:
+            log.exception("answering a question failed")
+            failed = Answer("unavailable", "Something went wrong on our side. Please try again.")
+            yield json.dumps(_event(failed, headlines)) + "\n"
+
+    return StreamingResponse(
+        lines(),
+        media_type="application/x-ndjson",
+        # Keep proxies from holding the lines back until the stream ends.
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+def _event(event: Progress | Answer, headlines: dict[str, str]) -> dict[str, Any]:
+    if isinstance(event, Progress):
+        return {"type": "progress", "text": event.text}
+    return {
+        "type": "answer",
+        "status": event.status,
+        "text": event.text,
+        "citations": [
+            {"reference": reference, "headline": headlines.get(reference, "")}
+            for reference in event.references
+        ],
+    }
+
+
+def _account(request: Request, user: User, tenant: Tenant) -> Account:
+    return Account(
+        name=user.name,
+        email=user.email,
+        tenant_id=tenant.id,
+        tenant_name=tenant.name,
+        assistant=request.app.state.llm is not None,
+    )
 
 
 def _summary(leak: Leak) -> LeakSummary:

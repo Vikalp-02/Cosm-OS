@@ -5,6 +5,8 @@ export type Account = {
   email: string;
   tenant_id: string;
   tenant_name: string;
+  /** Whether questions can be asked. False when no language model is configured. */
+  assistant: boolean;
 };
 
 export type Option = { id: string; label: string };
@@ -70,6 +72,8 @@ export type Day = {
 export type Product = { sku_id: string; name: string; brand: string };
 
 export type LeakDetail = LeakSummary & {
+  /** An AI-written summary, checked against the figures. Null when there is none. */
+  summary: string | null;
   what_happened: string;
   why: string;
   products: Product[];

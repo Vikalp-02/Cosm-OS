@@ -93,7 +93,7 @@ def narrate(payload: dict[str, Any]) -> Narrative:
     span = _span(date.fromisoformat(payload["start_date"]), date.fromisoformat(payload["end_date"]))
 
     def reading(key: str, style: str) -> str:
-        return _shown(evidence.get(key), style)
+        return shown(evidence.get(key), style)
 
     if cause in ("stockout", "supply_shortfall"):
         shelves = (
@@ -189,7 +189,7 @@ def _others(payload: dict[str, Any], reason: str) -> str:
     return f"{reason} {_listed(also).capitalize()} also cost sales over the same days."
 
 
-def _shown(value: float | None, style: str) -> str:
+def shown(value: float | None, style: str) -> str:
     if value is None:
         return "an unknown level"
     if style == "percent":

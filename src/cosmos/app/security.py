@@ -38,8 +38,8 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-class LoginThrottle:
-    """Pauses sign-in for a key after too many failures in a window.
+class Throttle:
+    """Pauses a key once it has too many events in a window.
 
     Held in memory, which is right for one process. Several API processes would
     each keep their own count and need a shared store instead.
@@ -62,7 +62,7 @@ class LoginThrottle:
                 return None
             return max(1, int(failures[0] + self._window - now) + 1)
 
-    def record_failure(self, key: str) -> None:
+    def record(self, key: str) -> None:
         now = time.monotonic()
         with self._lock:
             if key not in self._failures and len(self._failures) >= self._MAX_KEYS:

@@ -13,11 +13,14 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from cosmos.app.assistant import make_llm
+from cosmos.app.calls import database_recorder
 from cosmos.app.db import make_engine, make_session_factory, migrate
 from cosmos.app.models import Membership, Tenant, User
 from cosmos.app.pipeline import refresh_leaks
 from cosmos.app.security import hash_password
 from cosmos.app.settings import Settings
+from cosmos.app.summaries import summarise_leaks
 
 DEMO_TENANT = ("northwind", "Northwind Foods")
 MIN_PASSWORD_LENGTH = 12
@@ -54,7 +57,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     engine = make_engine(settings.database_url)
     try:
-        with make_session_factory(engine)() as db:
+        sessions = make_session_factory(engine)
+        with sessions() as db:
             if args.command == "seed-demo":
                 return _seed_demo(db, settings)
             result = refresh_leaks(args.data, args.tenant, db, datetime.now(UTC))
@@ -62,6 +66,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"{args.tenant}: {result.created} new leaks, {result.updated} updated,"
                 f" {result.withdrawn} withdrawn."
             )
+            llm = make_llm(settings)
+            if llm is None:
+                print("No language model is configured, so no summaries were written.")
+            else:
+                record = database_recorder(sessions, args.tenant)
+                written = summarise_leaks(db, args.tenant, llm, record)
+                print(f"{written} summaries written with {llm.model}.")
             return 0
     finally:
         engine.dispose()

@@ -2,6 +2,9 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { cache } from "react";
+
+import type { Account } from "@/lib/types";
 
 const API_URL = process.env.API_URL ?? "http://127.0.0.1:8000";
 const TIMEOUT_MS = 10_000;
@@ -39,6 +42,12 @@ export async function api<T>(path: string): Promise<T> {
   if (!response.ok) throw new ApiError(response.status, `Request failed (${response.status}).`);
   return (await response.json()) as T;
 }
+
+/**
+ * The signed-in user. Fetched once per page render however many components
+ * ask, and sends anyone without a session to the sign-in page.
+ */
+export const getAccount = cache(() => api<Account>("/api/auth/me"));
 
 /** Whether the visitor has a live session. Never redirects. */
 export async function isSignedIn(): Promise<boolean> {

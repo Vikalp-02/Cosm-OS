@@ -20,7 +20,7 @@ from cosmos.app.main import create_app
 from cosmos.app.models import Base, Leak, Membership, Tenant, User, UserSession
 from cosmos.app.narrative import indian_grouping, narrate
 from cosmos.app.pipeline import to_payload
-from cosmos.app.security import LoginThrottle, hash_password, verify_password
+from cosmos.app.security import Throttle, hash_password, verify_password
 from cosmos.app.settings import Settings
 from cosmos.app.store import sync_leaks
 from cosmos.engine import DailyPoint, Finding, RootCause
@@ -79,6 +79,7 @@ def settings(tmp_path: Path) -> Settings:
         cookie_secure=False,
         allowed_origins=(ORIGIN,),
         login_attempts=3,
+        llm_provider="none",
         _env_file=None,  # type: ignore[call-arg]
     )
 
@@ -140,10 +141,10 @@ def test_password_hashes_verify_only_the_right_password() -> None:
 
 
 def test_throttle_pauses_after_repeated_failures_and_clears_on_success() -> None:
-    throttle = LoginThrottle(attempts=2, window_seconds=60)
+    throttle = Throttle(attempts=2, window_seconds=60)
     assert throttle.retry_after("key") is None
-    throttle.record_failure("key")
-    throttle.record_failure("key")
+    throttle.record("key")
+    throttle.record("key")
     wait = throttle.retry_after("key")
     assert wait is not None and 0 < wait <= 61
     assert throttle.retry_after("another key") is None
@@ -159,6 +160,7 @@ def test_sign_in_sets_a_cookie_scripts_cannot_read(client: TestClient) -> None:
         "email": "asha@acme.test",
         "tenant_id": "acme",
         "tenant_name": "Acme",
+        "assistant": False,
     }
     cookie = response.headers["set-cookie"].lower()
     assert "httponly" in cookie and "samesite=lax" in cookie

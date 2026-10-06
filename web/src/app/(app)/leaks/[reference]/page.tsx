@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { AskBox } from "@/components/ask-box";
 import { DriverBars } from "@/components/driver-bars";
 import { TrendChart } from "@/components/trend-chart";
 import { Card, CauseTag, StatTile } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, getAccount } from "@/lib/api";
 import { count, dayCount, dayRange, inr, listed, plural, reading, shortDay } from "@/lib/format";
 import type { LeakDetail } from "@/lib/types";
 
@@ -17,7 +18,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function LeakPage({ params }: Props) {
   const { reference } = await params;
-  const leak = await api<LeakDetail>(`/api/leaks/${encodeURIComponent(reference)}`);
+  const [leak, account] = await Promise.all([
+    api<LeakDetail>(`/api/leaks/${encodeURIComponent(reference)}`),
+    getAccount(),
+  ]);
 
   const days = dayCount(leak.start_date, leak.end_date);
   const isGap = leak.cause === "data_gap";
@@ -48,6 +52,15 @@ export default async function LeakPage({ params }: Props) {
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_20rem]">
         <Card>
+          {leak.summary && (
+            <div className="mb-5 border-b border-line pb-5">
+              <h2 className="text-sm font-medium text-ink-2">Summary</h2>
+              <p className="mt-1 text-base leading-relaxed">{leak.summary}</p>
+              <p className="mt-2 text-xs text-ink-3">
+                Written by AI from the figures on this page, and checked against them.
+              </p>
+            </div>
+          )}
           <h2 className="text-sm font-medium text-ink-2">What happened</h2>
           <p className="mt-1 text-base leading-relaxed">{leak.what_happened}</p>
           <h2 className="mt-5 text-sm font-medium text-ink-2">
@@ -82,6 +95,15 @@ export default async function LeakPage({ params }: Props) {
                   ? "Lower than the drivers predict, by more than chance"
                   : "Higher than the drivers predict, by more than chance"
             }
+          />
+        </div>
+      )}
+
+      {account.assistant && (
+        <div className="mt-4">
+          <AskBox
+            reference={leak.reference}
+            suggestions={["Why did this happen?", "How sure is the figure?"]}
           />
         </div>
       )}

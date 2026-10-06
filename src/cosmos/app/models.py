@@ -105,3 +105,24 @@ class Leak(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime)
     # The finding as the engine reported it, plus the names of its products.
     payload: Mapped[dict[str, Any]] = mapped_column(JSON)
+    # An AI-written summary with the key of the facts it was written from, or
+    # null when there is none that passed its checks.
+    summary: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+
+
+class LlmCall(Base):
+    """One request to a language model: what it was for, how it went and what it used."""
+
+    __tablename__ = "llm_call"
+    __table_args__ = (Index("ix_llm_call_tenant_created", "tenant_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[str | None] = mapped_column(ForeignKey("tenant.id", ondelete="SET NULL"))
+    purpose: Mapped[str] = mapped_column(String(32))
+    prompt_version: Mapped[str] = mapped_column(String(32))
+    outcome: Mapped[str] = mapped_column(String(16))
+    model: Mapped[str] = mapped_column(String(64))
+    input_tokens: Mapped[int | None]
+    output_tokens: Mapped[int | None]
+    latency_ms: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime)

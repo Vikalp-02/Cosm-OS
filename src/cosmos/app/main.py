@@ -12,15 +12,18 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse
 
 from cosmos.app.api import router
+from cosmos.app.assistant import make_llm
 from cosmos.app.db import make_engine, make_session_factory
-from cosmos.app.security import LoginThrottle
+from cosmos.app.security import Throttle
 from cosmos.app.settings import Settings
+from cosmos.llm import LLM
 
 log = logging.getLogger("cosmos.api")
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(settings: Settings | None = None, llm: LLM | None = None) -> FastAPI:
+    """Build the API. Pass `llm` to use that model instead of the configured one."""
     settings = settings or Settings()
     engine = make_engine(settings.database_url)
 
@@ -38,7 +41,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.sessions = make_session_factory(engine)
-    app.state.throttle = LoginThrottle(settings.login_attempts, settings.login_window_minutes * 60)
+    app.state.throttle = Throttle(settings.login_attempts, settings.login_window_minutes * 60)
+    app.state.ask_throttle = Throttle(settings.ask_per_minute, 60)
+    app.state.llm = llm or make_llm(settings)
     allowed_origins = frozenset(settings.allowed_origins)
 
     @app.middleware("http")

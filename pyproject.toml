@@ -9,11 +9,14 @@ description = "Root-cause investigation for quick-commerce revenue leaks"
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.13",
+    "anthropic>=1.0",
     "argon2-cffi>=23.1",
     "dbt-duckdb>=1.9",
     "duckdb>=1.1",
     "fastapi>=0.115",
+    "langgraph>=0.4",
     "numpy>=2.0",
+    "openai>=1.60",
     "pyarrow>=17",
     "pydantic-settings>=2.4",
     "sqlalchemy>=2.0.30",

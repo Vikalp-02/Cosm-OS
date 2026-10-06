@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { AskBox } from "@/components/ask-box";
 import { CauseTag, StatTile } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, getAccount } from "@/lib/api";
 import { count, dayCount, dayRange, inr, listed, plural } from "@/lib/format";
 import type { LeakList, LeakSummary, Option } from "@/lib/types";
 
@@ -24,7 +25,10 @@ export default async function LeaksPage({
   const query = new URLSearchParams();
   if (filters.platform) query.set("platform", filters.platform);
   if (filters.cause) query.set("cause", filters.cause);
-  const data = await api<LeakList>(`/api/leaks${query.size ? `?${query}` : ""}`);
+  const [data, account] = await Promise.all([
+    api<LeakList>(`/api/leaks${query.size ? `?${query}` : ""}`),
+    getAccount(),
+  ]);
 
   const items =
     filters.sort === "largest"
@@ -41,6 +45,18 @@ export default async function LeaksPage({
       <p className="mt-1 text-sm text-ink-2">
         Where sales fell short of what they should have been, what caused it, and what it cost.
       </p>
+
+      {account.assistant && (
+        <div className="mt-6">
+          <AskBox
+            suggestions={[
+              "What cost us the most?",
+              "Which leaks were stockouts?",
+              "What went wrong most recently?",
+            ]}
+          />
+        </div>
+      )}
 
       <nav aria-label="Filters" className="mt-6 flex flex-col gap-3">
         <FilterRow

@@ -2,12 +2,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { SignOutButton } from "@/components/sign-out-button";
-import { api } from "@/lib/api";
-import type { Account } from "@/lib/types";
+import { getAccount } from "@/lib/api";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   // Sends anyone without a session to the sign-in page.
-  const account = await api<Account>("/api/auth/me");
+  const account = await getAccount();
 
   return (
     <>
